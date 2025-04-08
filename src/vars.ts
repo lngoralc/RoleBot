@@ -15,7 +15,7 @@ export const POSTGRES_HOST = process.env.POSTGRES_HOST || '';
 export const POSTGRES_USER = process.env.POSTGRES_USER || '';
 export const POSTGRES_PASSWORD = process.env.POSTGRES_PASSWORD || '';
 export const POSTGRES_DATABASE = process.env.POSTGRES_DATABASE || '';
-export const SERVER_ID = '567819334852804626';
+export const SERVER_ID = process.env.SERVER_ID || '';
 // Only sync when in dev
 export const SYNC_DB = Boolean(Number(process.env.SYNC_DB)) || false;
 
