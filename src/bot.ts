@@ -17,6 +17,8 @@ import { SlashCommand } from '../commands/command';
 import * as Sentry from '@sentry/node';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
 
+import { setTimeout } from 'node:timers/promises';
+
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
   integrations: [
@@ -102,12 +104,37 @@ export class RoleBot extends Discord.Client {
       );
     });
     // React role handling
-    this.on('messageReactionAdd', (...r) => {
+    this.on('messageReactionAdd', async (...r) => {
+      // matching remove-role-delay, so roles aren't re-added before even being initially removed
+      await setTimeout(1500);
       this.reactHandler
         .handleReaction(...r, 'add')
         .catch((e) => this.log.error(e));
+      // Remove join roles once any react role has been added
+      try {
+        const member = r[0].message.guild?.members.cache.get(r[1].id)
+        if (!member) return; // member will always be defined unless Discord itself bugged, but vscode is highlighting everything with red if I don't include this
+        const joinRoles = await GET_GUILD_JOIN_ROLES(member.guild.id);
+        
+        // Abort if no join roles, or member already has a role higher than the join roles
+        // (assumes all join roles are lower in the role hierarchy than all reaction roles,
+        // so having a higher role implies join roles were already previously removed)
+        if (!joinRoles.length) return;
+        if (member.roles.highest.id != joinRoles[0].roleId) return;
+
+        // delay before removing join role, so if users accidentally double-tap the first react role
+        // they have time to re-add it before join role permissions are removed
+        await setTimeout(5000);
+        member.roles.remove(joinRoles.map((r) => r.roleId)).catch((e) => {
+          this.log.debug(`Issue removing member join roles\n${e}`, member.guild.id);
+        });
+      } catch (e) {
+        this.log.error(`Failed to get join roles to remove for new member.\n${e}`);
+      }
     });
-    this.on('messageReactionRemove', (...r) => {
+    this.on('messageReactionRemove', async (...r) => {
+      // short delay before removing roles so they have time to re-add the role if need be
+      await setTimeout(1500);
       this.reactHandler
         .handleReaction(...r, 'remove')
         .catch((e) => this.log.error(e));
@@ -165,7 +192,8 @@ export class RoleBot extends Discord.Client {
     this.log.info('Bot connected.');
 
     // 741682757486510081 - New RoleBot application.
-    await buildNewCommands(false, config.CLIENT_ID !== '741682757486510081');
+    //await buildNewCommands(true, config.CLIENT_ID !== '741682757486510081'); commented since not first-time startup anymore
+     await buildNewCommands(false, config.CLIENT_ID !== '741682757486510081');
   };
 
   private updatePresence = () => {
